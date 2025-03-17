@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aptos Chat Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    #chat-container { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: scroll; margin-bottom: 10px; }
+    #message-input { width: 80%; padding: 8px; }
+    button { padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <h1>Aptos Chat Agent Test</h1>
+  <div id="chat-container"></div>
+  <input type="text" id="message-input" placeholder="Type your message...">
+  <button id="send-button">Send</button>
+
+  <script>
+    const chatContainer = document.getElementById('chat-container');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const messages = [];
+
+    function addMessage(content, role) {
+      const messageDiv = document.createElement('div');
+      messageDiv.style.margin = '10px 0';
+      messageDiv.style.padding = '10px';
+      messageDiv.style.borderRadius = '5px';
+      messageDiv.style.backgroundColor = role === 'user' ? '#e6f7ff' : '#f0f0f0';
+      messageDiv.textContent = content;
+      chatContainer.appendChild(messageDiv);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      if (role === 'user') {
+        messages.push({ role: 'user', content });
+      }
+    }
+
+    async function sendMessage() {
+      const content = messageInput.value.trim();
+      if (!content) return;
+
+      addMessage(content, 'user');
+      messageInput.value = '';
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messages }),
+        });
+
+        if (response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let assistantMessage = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            assistantMessage += chunk;
+            
+            // Update UI with streaming content
+            const messageDiv = document.querySelector('#chat-container div:last-child');
+            if (messageDiv && messageDiv.textContent === assistantMessage.substring(0, assistantMessage.length - chunk.length)) {
+              messageDiv.textContent = assistantMessage;
+            } else {
+              addMessage(assistantMessage, 'assistant');
+              assistantMessage = '';
+            }
+          }
+
+          if (assistantMessage) {
+            addMessage(assistantMessage, 'assistant');
+          }
+          
+          // Add to messages array
+          messages.push({ role: 'assistant', content: assistantMessage });
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        addMessage('Error: Could not send message. Please try again.', 'system');
+      }
+    }
+
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // Add welcome message
+    addMessage('Hello! I\'m your Aptos agent. How can I help you today?', 'assistant');
+  </script>
+</body>
+</html>
